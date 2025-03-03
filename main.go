@@ -1,0 +1,290 @@
+package main
+
+import (
+	"fmt"
+	"log"
+	"math/rand"
+	"os"
+	"strconv"
+	"time"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/widget"
+	"gonum.org/v1/plot"
+	"gonum.org/v1/plot/plotter"
+	"gonum.org/v1/plot/vg"
+)
+
+var content *fyne.Container
+
+var (
+	buttons        = make(map[string]*widget.Button)
+	highlightedKey string
+	startTime      time.Time
+	attempts       int
+	currentLevel   int = 1
+	testRunning    bool
+	results        []float64
+	graphImage     *canvas.Image
+	speedLevels    = map[int]time.Duration{
+		1: 3000 * time.Millisecond,
+		2: 2500 * time.Millisecond,
+		3: 2000 * time.Millisecond,
+		4: 1500 * time.Millisecond,
+		5: 1000 * time.Millisecond,
+	}
+	numPadEnabled bool // Флаг включения NumPad
+)
+
+// Функция выбора случайной клавиши
+func getNextKey() string {
+	keys := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"}
+
+	// Добавляем NumPad для уровней 4 и 5
+	if numPadEnabled {
+		numPadKeys := []string{"Num1", "Num2", "Num3", "Num4", "Num5", "Num6", "Num7", "Num8", "Num9", "Num0"}
+		keys = append(keys, numPadKeys...)
+	}
+
+	return keys[rand.Intn(len(keys))]
+}
+
+// Функция подсветки клавиши
+func highlightRandomKey(label *widget.Label, window fyne.Window) {
+	if !testRunning {
+		return
+	}
+
+	// Убираем подсветку с предыдущей клавиши
+	if btn, exists := buttons[highlightedKey]; exists {
+		btn.Importance = widget.MediumImportance
+		btn.Refresh()
+	}
+
+	// Выбираем новую клавишу
+	highlightedKey = getNextKey()
+	if btn, exists := buttons[highlightedKey]; exists {
+		btn.Importance = widget.HighImportance
+		btn.Refresh()
+	}
+
+	// Обновляем текст метки
+	label.SetText("Нажмите: " + highlightedKey)
+
+	// Фиксируем время начала реакции
+	startTime = time.Now()
+
+	// Обновляем интерфейс
+	window.Canvas().Refresh(label)
+}
+
+// func keyPressed(input string, label *widget.Label, window fyne.Window, content *fyne.Container) {
+// 	if !testRunning || input != highlightedKey {
+// 		return
+// 	}
+
+// 	// Фиксируем время реакции
+// 	reactionTime := time.Since(startTime).Seconds()
+// 	results = append(results, reactionTime)
+// 	attempts++
+
+// 	// Обновляем график после каждого нажатия
+// 	drawGraph()
+
+// 	// Проверяем завершение теста
+// 	if attempts >= 10 {
+// 		testRunning = false
+// 		label.SetText("Тест завершен")
+// 		saveResults()
+
+// 		// КОСТЫЛЬ: создаём новый график-картинку, чтобы он не пропал
+// 		finalGraph := canvas.NewImageFromFile("reaction_graph.png")
+// 		finalGraph.Resize(fyne.NewSize(450, 300))
+// 		finalGraph.FillMode = canvas.ImageFillContain
+
+// 		// Меняем старый график на новый
+// 		content.Remove(graphImage)
+// 		content.Add(finalGraph)
+
+// 		// Обновляем интерфейс
+// 		content.Refresh()
+
+// 		return
+// 	}
+
+// 	highlightRandomKey(label, window)
+// }
+
+func keyPressed(input string, label *widget.Label, window fyne.Window, content *fyne.Container) {
+	if !testRunning || input != highlightedKey {
+		return
+	}
+
+	// Фиксируем время реакции
+	reactionTime := time.Since(startTime).Seconds()
+	results = append(results, reactionTime)
+	attempts++
+
+	// Обновляем график после каждого нажатия
+	drawGraph()
+
+	// Проверяем завершение теста
+	if attempts >= 10 {
+		testRunning = false
+		label.SetText("Тест завершен")
+		saveResults()
+
+		// ЖЁСТКИЙ КОСТЫЛЬ: принудительно обновляем `graphImage`, НЕ создавая новый объект
+		graphImage.File = "reaction_graph.png"
+		graphImage.Refresh() // Принудительно перерисовываем график
+
+		// ПРИНУДИТЕЛЬНО обновляем весь контейнер, но НЕ удаляем `graphImage`
+		content.Refresh()
+
+		return
+	}
+
+	highlightRandomKey(label, window)
+}
+
+// Функция сохранения результатов
+func saveResults() {
+	file, err := os.OpenFile("reaction_results.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	file.WriteString(fmt.Sprintf("\nТест: Уровень %d\n", currentLevel))
+	for i, time := range results {
+		file.WriteString(fmt.Sprintf("Нажатие %d: %.3f сек\n", i+1, time))
+	}
+}
+
+// Функция рисования графика
+func drawGraph() {
+	p := plot.New()
+	p.Title.Text = "Время реакции"
+	p.X.Label.Text = "Нажатие"
+	p.Y.Label.Text = "Время (сек)"
+
+	points := make(plotter.XYs, len(results))
+	for i, time := range results {
+		points[i].X = float64(i + 1)
+		points[i].Y = time
+	}
+
+	s, err := plotter.NewScatter(points)
+	if err != nil {
+		log.Fatal(err)
+	}
+	p.Add(s)
+
+	err = p.Save(150*vg.Millimeter, 100*vg.Millimeter, "reaction_graph.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Обновляем изображение графика в GUI
+	graphImage.File = "reaction_graph.png"
+	graphImage.Resize(fyne.NewSize(450, 300))
+	graphImage.Refresh()
+}
+
+// Функция запуска теста
+func startTest(label *widget.Label, window fyne.Window) {
+	testRunning = true
+	attempts = 0
+	results = []float64{}
+	highlightRandomKey(label, window)
+}
+
+// Функция смены уровня
+func changeLevel(level int, label *widget.Label, numPadContainer *fyne.Container) {
+	currentLevel = level
+	testRunning = false
+	label.SetText("Выберите уровень и нажмите 'Старт'")
+
+	// Включаем NumPad только для уровней 4 и 5
+	numPadEnabled = (level == 4 || level == 5)
+	if numPadEnabled {
+		numPadContainer.Show()
+	} else {
+		numPadContainer.Hide()
+	}
+}
+
+func main() {
+	rand.Seed(time.Now().UnixNano())
+	myApp := app.New()
+	myWindow := myApp.NewWindow("Тест скорости реакции")
+	myWindow.Resize(fyne.NewSize(900, 700))
+
+	// Метка текущей клавиши
+	label := widget.NewLabel("Выберите уровень и нажмите 'Старт'")
+
+	// Кнопки 0-9
+	buttonGrid := container.NewGridWithColumns(10)
+	for _, num := range []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"} {
+		btn := widget.NewButton(num, func(n string) func() {
+			return func() {
+				keyPressed(n, label, myWindow, content)
+			}
+		}(num))
+		buttons[num] = btn
+		buttonGrid.Add(btn)
+	}
+
+	// NumPad (изначально скрыт)
+	numPadContainer := container.NewGridWithColumns(3)
+	for _, num := range []string{"Num1", "Num2", "Num3", "Num4", "Num5", "Num6", "Num7", "Num8", "Num9", "Num0"} {
+		btn := widget.NewButton(num, func(n string) func() {
+			return func() {
+				keyPressed(n, label, myWindow, content)
+			}
+		}(num))
+		buttons[num] = btn
+		numPadContainer.Add(btn)
+	}
+	numPadContainer.Hide()
+
+	// Кнопки уровней
+	levelButtons := container.NewHBox()
+	for i := 1; i <= 5; i++ {
+		lvl := i
+		levelButtons.Add(widget.NewButton("Уровень "+strconv.Itoa(lvl), func() {
+			changeLevel(lvl, label, numPadContainer)
+		}))
+	}
+
+	// Кнопка "Старт"
+	startButton := widget.NewButton("Старт", func() {
+		startTest(label, myWindow)
+	})
+
+	// Поле для графика
+	graphImage = canvas.NewImageFromFile("reaction_graph.png")
+	graphImage.Resize(fyne.NewSize(450, 300))
+	graphImage.FillMode = canvas.ImageFillContain
+
+	// Основной контейнер
+	content := container.NewVBox(
+		label,
+		startButton,
+		levelButtons,
+		buttonGrid,
+		numPadContainer,
+		graphImage,
+	)
+
+	myWindow.SetContent(content)
+
+	myWindow.Canvas().SetOnTypedKey(func(event *fyne.KeyEvent) {
+		keyPressed(string(event.Name), label, myWindow, content)
+	})
+
+	myWindow.ShowAndRun()
+}
