@@ -113,11 +113,16 @@ func keyPressed(input string, label *widget.Label, window fyne.Window, content *
 		label.SetText("Тест завершен")
 		saveResults()
 
-		// Обновляем график в GUI
-		graphImage.File = "reaction_graph.png"
-		graphImage.Refresh() // Принудительно перерисовываем график
+		// КОСТЫЛЬ: создаём новый график-картинку, чтобы он не пропал
+		finalGraph := canvas.NewImageFromFile("reaction_graph.png")
+		finalGraph.Resize(fyne.NewSize(450, 300))
+		finalGraph.FillMode = canvas.ImageFillContain
 
-		// Обновляем весь контейнер
+		// Меняем старый график на новый
+		content.Remove(graphImage)
+		content.Add(finalGraph)
+
+		// Обновляем интерфейс
 		content.Refresh()
 
 		return
@@ -164,10 +169,11 @@ func drawGraph() {
 		log.Fatal(err)
 	}
 
+
 	// Обновляем изображение графика в GUI
 	graphImage.File = "reaction_graph.png"
-
-	graphImage.Refresh() // Принудительно перерисовываем график
+	graphImage.Resize(fyne.NewSize(450, 300))
+	graphImage.Refresh()
 }
 
 // Функция запуска теста
@@ -247,7 +253,6 @@ func main() {
 	graphImage.FillMode = canvas.ImageFillContain
 
 	// Основной контейнер
-	graphImage.Resize(fyne.NewSize(450, 300))	
 	content = container.NewVBox(
 		label,
 		startButton,
