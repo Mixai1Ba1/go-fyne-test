@@ -39,6 +39,14 @@ var (
 	numPadEnabled bool // Флаг включения NumPad
 )
 
+// Коды клавиш для цифр (верхний блок и NumPad)
+var keyCodes = map[int]string{
+	// Верхний блок цифр
+	18: "1", 19: "2", 20: "3", 21: "4", 23: "5", 22: "6", 26: "7", 28: "8", 25: "9", 29: "0",
+	// NumPad
+	83: "Num1", 84: "Num2", 85: "Num3", 86: "Num4", 87: "Num5", 88: "Num6", 89: "Num7", 91: "Num8", 92: "Num9", 82: "Num0",
+}
+
 // Функция выбора случайной клавиши
 func getNextKey() string {
 	keys := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"}
@@ -81,45 +89,13 @@ func highlightRandomKey(label *widget.Label, window fyne.Window) {
 	window.Canvas().Refresh(label)
 }
 
-// func keyPressed(input string, label *widget.Label, window fyne.Window, content *fyne.Container) {
-// 	if !testRunning || input != highlightedKey {
-// 		return
-// 	}
-
-// 	// Фиксируем время реакции
-// 	reactionTime := time.Since(startTime).Seconds()
-// 	results = append(results, reactionTime)
-// 	attempts++
-
-// 	// Обновляем график после каждого нажатия
-// 	drawGraph()
-
-// 	// Проверяем завершение теста
-// 	if attempts >= 10 {
-// 		testRunning = false
-// 		label.SetText("Тест завершен")
-// 		saveResults()
-
-// 		// КОСТЫЛЬ: создаём новый график-картинку, чтобы он не пропал
-// 		finalGraph := canvas.NewImageFromFile("reaction_graph.png")
-// 		finalGraph.Resize(fyne.NewSize(450, 300))
-// 		finalGraph.FillMode = canvas.ImageFillContain
-
-// 		// Меняем старый график на новый
-// 		content.Remove(graphImage)
-// 		content.Add(finalGraph)
-
-// 		// Обновляем интерфейс
-// 		content.Refresh()
-
-// 		return
-// 	}
-
-// 	highlightRandomKey(label, window)
-// }
-
 func keyPressed(input string, label *widget.Label, window fyne.Window, content *fyne.Container) {
-	if !testRunning || input != highlightedKey {
+	if !testRunning {
+		return
+	}
+
+	if input != highlightedKey {
+		label.SetText(fmt.Sprintf("Ошибка: Вы нажали не ту клавишу. Ожидалось: %s", highlightedKey))
 		return
 	}
 
@@ -137,11 +113,11 @@ func keyPressed(input string, label *widget.Label, window fyne.Window, content *
 		label.SetText("Тест завершен")
 		saveResults()
 
-		// ЖЁСТКИЙ КОСТЫЛЬ: принудительно обновляем `graphImage`, НЕ создавая новый объект
+		// Обновляем график в GUI
 		graphImage.File = "reaction_graph.png"
 		graphImage.Refresh() // Принудительно перерисовываем график
 
-		// ПРИНУДИТЕЛЬНО обновляем весь контейнер, но НЕ удаляем `graphImage`
+		// Обновляем весь контейнер
 		content.Refresh()
 
 		return
@@ -190,8 +166,8 @@ func drawGraph() {
 
 	// Обновляем изображение графика в GUI
 	graphImage.File = "reaction_graph.png"
-	graphImage.Resize(fyne.NewSize(450, 300))
-	graphImage.Refresh()
+
+	graphImage.Refresh() // Принудительно перерисовываем график
 }
 
 // Функция запуска теста
@@ -271,7 +247,8 @@ func main() {
 	graphImage.FillMode = canvas.ImageFillContain
 
 	// Основной контейнер
-	content := container.NewVBox(
+	graphImage.Resize(fyne.NewSize(450, 300))	
+	content = container.NewVBox(
 		label,
 		startButton,
 		levelButtons,
@@ -282,8 +259,16 @@ func main() {
 
 	myWindow.SetContent(content)
 
+	// Обработка нажатий клавиш по их кодам
 	myWindow.Canvas().SetOnTypedKey(func(event *fyne.KeyEvent) {
-		keyPressed(string(event.Name), label, myWindow, content)
+		keyCode := int(event.Physical.ScanCode)
+		fmt.Printf("Нажата клавиша с кодом: %d\n", keyCode) // Отладочное сообщение
+
+		if key, exists := keyCodes[keyCode]; exists {
+			keyPressed(key, label, myWindow, content)
+		} else {
+			label.SetText(fmt.Sprintf("Ошибка: Клавиша с кодом %d не распознана", keyCode))
+		}
 	})
 
 	myWindow.ShowAndRun()
