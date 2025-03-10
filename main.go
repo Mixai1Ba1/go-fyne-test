@@ -47,17 +47,28 @@ var keyCodes = map[int]string{
 	83: "Num1", 84: "Num2", 85: "Num3", 86: "Num4", 87: "Num5", 88: "Num6", 89: "Num7", 91: "Num8", 92: "Num9", 82: "Num0",
 }
 
-// Функция выбора случайной клавиши
+// Функция выбора случайной клавиши в зависимости от уровня
 func getNextKey() string {
-	keys := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"}
-
-	// Добавляем NumPad для уровней 4 и 5
-	if numPadEnabled {
-		numPadKeys := []string{"Num1", "Num2", "Num3", "Num4", "Num5", "Num6", "Num7", "Num8", "Num9", "Num0"}
-		keys = append(keys, numPadKeys...)
+	switch currentLevel {
+	case 1:
+		return "1" // Фиксированная клавиша для уровня 1
+	case 2:
+		// Случайная клавиша на верхней панели
+		keys := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"}
+		return keys[rand.Intn(len(keys))]
+	case 3:
+		return "Num1" // Фиксированная клавиша для уровня 3
+	case 4:
+		// Случайная клавиша на NumPad
+		keys := []string{"Num1", "Num2", "Num3", "Num4", "Num5", "Num6", "Num7", "Num8", "Num9", "Num0"}
+		return keys[rand.Intn(len(keys))]
+	case 5:
+		// Случайная клавиша на всех панелях
+		keys := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "Num1", "Num2", "Num3", "Num4", "Num5", "Num6", "Num7", "Num8", "Num9", "Num0"}
+		return keys[rand.Intn(len(keys))]
+	default:
+		return "1" // По умолчанию
 	}
-
-	return keys[rand.Intn(len(keys))]
 }
 
 // Функция подсветки клавиши
@@ -169,7 +180,6 @@ func drawGraph() {
 		log.Fatal(err)
 	}
 
-
 	// Обновляем изображение графика в GUI
 	graphImage.File = "reaction_graph.png"
 	graphImage.Resize(fyne.NewSize(450, 300))
@@ -190,8 +200,8 @@ func changeLevel(level int, label *widget.Label, numPadContainer *fyne.Container
 	testRunning = false
 	label.SetText("Выберите уровень и нажмите 'Старт'")
 
-	// Включаем NumPad только для уровней 4 и 5
-	numPadEnabled = (level == 4 || level == 5)
+	// Включаем NumPad только для уровней 3, 4 и 5
+	numPadEnabled = (level >= 3)
 	if numPadEnabled {
 		numPadContainer.Show()
 	} else {
